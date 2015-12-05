@@ -1,6 +1,8 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include <QKeyEvent>
+
 #include <opencv2/imgproc.hpp>
 
 using namespace cv;
@@ -12,7 +14,8 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
     iters(0),
-    lastMeasurIter(-1)
+    lastMeasurIter(-1),
+    paused(false)
 {
     ui->setupUi(this);
 
@@ -29,6 +32,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     ui->spinBoxMasterRate->setValue(50);
     ui->spinBoxMeasurementRate->setValue(45);
+
+//    grabKeyboard();
 }
 
 MainWindow::~MainWindow()
@@ -60,57 +65,31 @@ void MainWindow::setProcessNoiseVariance(double value)
 
 void MainWindow::update()
 {
-    // Update mouse position
+    if (paused) {
+        return;
+    }
 
-    int x_s = 0;
-    int y_s = 0;
+    // do we have a new measurement?
+    int masterRate = ui->spinBoxMasterRate->value();
+    int measurementRate = ui->spinBoxMeasurementRate->value();
+    int skipIters = masterRate / measurementRate;
+    bool haveNewMeasurement = lastMeasurIter + skipIters <= iters;
 
-    QPoint mousePos = ui->labelTrackPreview->mapFromGlobal(QCursor::pos());
+    Point mpos = getMousePos();
 
-    // clamp x and y
-
-    const int x_max = ui->labelTrackPreview->width();
-    const int y_max = ui->labelTrackPreview->height();
-    x_s = mousePos.x() < 0 ? 0 : mousePos.x();
-    x_s = x_s > x_max ? x_max : x_s;
-    y_s = mousePos.y() < 0 ? 0 : mousePos.y();
-    y_s = y_s > y_max ? y_max : y_s;
-
-    // add noise to measurements
-
-    Mat_<float> measurNoise = Mat_<float>(2, 1);
-    cv::randn(measurNoise, 0, sqrt(measurNoiseVar));
-
-    x_s += measurNoise.at<float>(0);
-    y_s += measurNoise.at<float>(1);
-
-    mouseTrack.push_back(Point(x_s, y_s));
+    mouseTrack.push_back(mpos);
 
     if (mouseTrack.size() > MAX_TRACK_LINE) {
         mouseTrack.pop_front();
     }
 
-    // Prediction step
-
     Mat prediction = KF.predict();
+    Point predictiedPt(prediction.at<float>(0), prediction.at<float>(1));
 
-    // Correction step
+    bool fakeMeasurement = ui->checkBoxUseFakeMeausur->isChecked();
 
-    // do we have a new measurement?
-    int masterRate = ui->spinBoxMasterRate->value();
-    int measurementRate = ui->spinBoxMeasurementRate->value();
-    int iterSkip = masterRate / measurementRate;
-    bool haveNewMeasurement = lastMeasurIter + iterSkip <= iters;
-
-    Mat_<float> measurement(2, 1);
-
-    if (haveNewMeasurement) {
-        measurement.at<float>(0) = x_s;
-        measurement.at<float>(1) = y_s;
-
-        lastMeasurIter = iters;
-    }
-    else {
+    if (!haveNewMeasurement && fakeMeasurement) {
+        Mat_<float> measurement(2, 1);
         measurement.at<float>(0) = prediction.at<float>(0);
         measurement.at<float>(1) = prediction.at<float>(1);
 
@@ -120,12 +99,27 @@ void MainWindow::update()
             cv::randn(noise, 0, sqrt(measurNoiseVar));
             measurement += noise;
         }
+
+        Mat corrected = KF.correct(measurement);
+        Point correctedPt(corrected.at<float>(0), corrected.at<float>(1));
+
+        filterTrack.push_back(correctedPt);
     }
+    else if (!haveNewMeasurement && !fakeMeasurement) {
+        filterTrack.push_back(predictiedPt);
+    }
+    else {
+        Mat_<float> measurement(2, 1);
+        measurement.at<float>(0) = mpos.x;
+        measurement.at<float>(1) = mpos.y;
 
-    Mat corrected = KF.correct(measurement);
-    Point correctedPt(corrected.at<float>(0), corrected.at<float>(1));
+        Mat corrected = KF.correct(measurement);
+        Point correctedPt(corrected.at<float>(0), corrected.at<float>(1));
 
-    filterTrack.push_back(correctedPt);
+        filterTrack.push_back(correctedPt);
+
+        lastMeasurIter = iters;
+    }
 
     if (filterTrack.size() > MAX_TRACK_LINE) {
         filterTrack.pop_front();
@@ -135,8 +129,8 @@ void MainWindow::update()
 
     // show info
 
-    ui->labelMouseCurX->setText(QString::number(x_s));
-    ui->labelMouseCurY->setText(QString::number(y_s));
+    ui->labelMouseCurX->setText(QString::number(mpos.x));
+    ui->labelMouseCurY->setText(QString::number(mpos.y));
 
     ++iters;
 }
@@ -195,8 +189,41 @@ void MainWindow::initKalmanFilter()
     setIdentity(KF.statePost, Scalar::all(0));
 }
 
+Point MainWindow::getMousePos()
+{
+    int mx = 0;
+    int my = 0;
+
+    QPoint mousePos = ui->labelTrackPreview->mapFromGlobal(QCursor::pos());
+
+    // clamp x and y
+    const int x_max = ui->labelTrackPreview->width();
+    const int y_max = ui->labelTrackPreview->height();
+    mx = mousePos.x() < 0 ? 0 : mousePos.x();
+    mx = mx > x_max ? x_max : mx;
+    my = mousePos.y() < 0 ? 0 : mousePos.y();
+    my = my > y_max ? y_max : my;
+
+    // add noise to measurements
+    Mat_<float> noise = Mat_<float>(2, 1);
+    cv::randn(noise, 0, sqrt(measurNoiseVar));
+
+    mx += noise.at<float>(0);
+    my += noise.at<float>(1);
+
+    return Point(mx, my);
+}
+
 void drawCross(Mat img, Point center, Scalar color, float d)
 {
     line( img, Point( center.x - d, center.y - d ), Point( center.x + d, center.y + d ), color, 2, CV_AA, 0 );
     line( img, Point( center.x + d, center.y - d ), Point( center.x - d, center.y + d ), color, 2, CV_AA, 0 );
+}
+
+
+void MainWindow::keyPressEvent(QKeyEvent *ev)
+{
+    if (ev->key() == Qt::Key_Space) {
+        paused = !paused;
+    }
 }

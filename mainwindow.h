@@ -36,6 +36,8 @@ private slots:
 private:
     void initKalmanFilter();
 
+    cv::Point getMousePos();
+
     Ui::MainWindow *ui;
 
     QTimer masterTimer;
@@ -50,6 +52,12 @@ private:
 
     int iters;
     int lastMeasurIter;
+
+    bool paused;
+
+    // QWidget interface
+protected:
+    virtual void keyPressEvent(QKeyEvent *) override;
 };
 
 void drawCross(cv::Mat img, cv::Point center, cv::Scalar color, float d);                                 \
