@@ -32,4 +32,4 @@ LIBS +=  \
     -lopencv_video300 \
     -lopencv_videoio300 \
 
-DEFINES += MODEL_ACCEL=1
+#DEFINES += MODEL_ACCEL=1

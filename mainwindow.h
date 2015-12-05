@@ -27,6 +27,8 @@ private slots:
 
     void setProcessNoiseVariance(double value);
 
+    void use3OrderModel(bool use);
+
     void update();
 
     void drawTracks();
@@ -34,7 +36,7 @@ private slots:
     void clearTrack();
 
 private:
-    void initKalmanFilter();
+    void initKalmanFilter(bool use3orderModel);
 
     cv::Point getMousePos();
 
@@ -47,7 +49,8 @@ private:
     double measurNoiseVar;
     double processNoiseVar;
 
-    QQueue<cv::Point> mouseTrack;
+    QQueue<cv::Point> mouseRealTrack;
+    QQueue<cv::Point> mouseMeasurTrack;
     QQueue<cv::Point> filterTrack;
 
     int iters;

@@ -21,17 +21,19 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(ui->pushButtonClear, SIGNAL(clicked(bool)), this, SLOT(clearTrack()));
 
+    connect(ui->checkBoxUse3orderModel, SIGNAL(clicked(bool)), this, SLOT(use3OrderModel(bool)));
     connect(ui->doubleSpinBoxMeasurementVariance, SIGNAL(valueChanged(double)), this, SLOT(setMeasurementNoiseVariance(double)));
     connect(ui->doubleSpinBoxProcessVariance, SIGNAL(valueChanged(double)), this, SLOT(setProcessNoiseVariance(double)));
 
-    ui->doubleSpinBoxMeasurementVariance->setValue(10.);
-    ui->doubleSpinBoxProcessVariance->setValue(1e-4);
+    ui->checkBoxUse3orderModel->setChecked(true);
+    ui->doubleSpinBoxMeasurementVariance->setValue(50.);
+    ui->doubleSpinBoxProcessVariance->setValue(1e-5);
 
     connect(ui->spinBoxMasterRate, SIGNAL(valueChanged(int)), this, SLOT(setMasterRate(int)));
     connect(&masterTimer, SIGNAL(timeout()), this, SLOT(update()));
 
     ui->spinBoxMasterRate->setValue(50);
-    ui->spinBoxMeasurementRate->setValue(45);
+    ui->spinBoxMeasurSampling->setValue(1);
 
 //    grabKeyboard();
 }
@@ -53,14 +55,21 @@ void MainWindow::setMeasurementNoiseVariance(double value)
 {
     measurNoiseVar = value;
 
-    initKalmanFilter();
+    bool use3orderModel = ui->checkBoxUse3orderModel->isChecked();
+    initKalmanFilter(use3orderModel);
 }
 
 void MainWindow::setProcessNoiseVariance(double value)
 {
     processNoiseVar = value;
 
-    initKalmanFilter();
+    bool use3orderModel = ui->checkBoxUse3orderModel->isChecked();
+    initKalmanFilter(use3orderModel);
+}
+
+void MainWindow::use3OrderModel(bool use)
+{
+    initKalmanFilter(use);
 }
 
 void MainWindow::update()
@@ -70,17 +79,27 @@ void MainWindow::update()
     }
 
     // do we have a new measurement?
-    int masterRate = ui->spinBoxMasterRate->value();
-    int measurementRate = ui->spinBoxMeasurementRate->value();
-    int skipIters = masterRate / measurementRate;
-    bool haveNewMeasurement = lastMeasurIter + skipIters <= iters;
+    int skipIters = ui->spinBoxMeasurSampling->value();
+    bool haveNewMeasurement = (lastMeasurIter + skipIters) < iters;
 
     Point mpos = getMousePos();
 
-    mouseTrack.push_back(mpos);
+    mouseRealTrack.push_back(mpos);
 
-    if (mouseTrack.size() > MAX_TRACK_LINE) {
-        mouseTrack.pop_front();
+    if (mouseRealTrack.size() > MAX_TRACK_LINE) {
+        mouseRealTrack.pop_front();
+    }
+
+    // add noise to measurements
+    Mat_<float> noise = Mat_<float>(2, 1);
+    cv::randn(noise, 0, sqrt(measurNoiseVar));
+
+    mpos = Point(mpos.x + noise.at<float>(0), mpos.y + noise.at<float>(1));
+
+    mouseMeasurTrack.push_back(mpos);
+
+    if (mouseMeasurTrack.size() > MAX_TRACK_LINE) {
+        mouseMeasurTrack.pop_front();
     }
 
     Mat prediction = KF.predict();
@@ -139,23 +158,30 @@ void MainWindow::drawTracks()
 {
     Mat image = Mat::zeros(ui->labelTrackPreview->height(), ui->labelTrackPreview->width(), CV_8UC3);
 
-    bool showMouseTrack = ui->checkBoxShowMouseTrack->isChecked();
-    if (showMouseTrack) {
-        for (int i = 0; i < mouseTrack.size()-1; i++) {
-             line(image, mouseTrack[i], mouseTrack[i+1], Scalar(255, 255, 0), 1);
+    bool showRealTrack = ui->checkBoxShowRealTrack->isChecked();
+    if (showRealTrack) {
+        for (int i = 0; i < mouseRealTrack.size()-1; i++) {
+             line(image, mouseRealTrack[i], mouseRealTrack[i+1], Scalar(255, 0, 0), 2);
+        }
+    }
+
+    bool showMeasurTrack = ui->checkBoxShowMeasurTrack->isChecked();
+    if (showMeasurTrack) {
+        for (int i = 0; i < mouseMeasurTrack.size()-1; i++) {
+             line(image, mouseMeasurTrack[i], mouseMeasurTrack[i+1], Scalar(255, 255, 0), 1);
         }
     }
 
     bool showFilterTrack = ui->checkBoxFilterTrack->isChecked();
     if (showFilterTrack) {
         for (int i = 0; i < filterTrack.size()-1; i++) {
-             line(image, filterTrack[i], filterTrack[i+1], Scalar(0, 155, 255), 1);
+             line(image, filterTrack[i], filterTrack[i+1], Scalar(0, 155, 255), 2);
         }
     }
 
     bool showCross = ui->checkBoxShowCross->isChecked();
     if (showCross) {
-        drawCross(image, mouseTrack.last(), Scalar(255, 255, 0), 5);
+        drawCross(image, mouseRealTrack.last(), Scalar(255, 255, 0), 5);
         drawCross(image, filterTrack.last(), Scalar(0, 155, 255), 5);
     }
 
@@ -165,21 +191,23 @@ void MainWindow::drawTracks()
 
 void MainWindow::clearTrack()
 {
-    mouseTrack.clear();
+    mouseMeasurTrack.clear();
+    mouseRealTrack.clear();
     filterTrack.clear();
 }
 
-void MainWindow::initKalmanFilter()
+void MainWindow::initKalmanFilter(bool use3orderModel)
 {
-#ifdef MODEL_ACCEL
-    KF = KalmanFilter(6, 2);
+    if (use3orderModel) {
+        KF = KalmanFilter(6, 2);
 
-    KF.transitionMatrix = (Mat_<float>(6, 6) << 1,0,1,0,0.5,0,   0,1,0,1,0,0.5,  0,0,1,0,1,0,  0,0,0,1,0,1,  0,0,0,0,1,0,  0,0,0,0,0,1);
-#else
-    KF = KalmanFilter(4, 2);
+        KF.transitionMatrix = (Mat_<float>(6, 6) << 1,0,1,0,0.5,0,   0,1,0,1,0,0.5,  0,0,1,0,1,0,  0,0,0,1,0,1,  0,0,0,0,1,0,  0,0,0,0,0,1);
+    }
+    else {
+        KF = KalmanFilter(4, 2);
 
-    KF.transitionMatrix = (Mat_<float>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
-#endif
+        KF.transitionMatrix = (Mat_<float>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
+    }
 
     setIdentity(KF.measurementMatrix);
     setIdentity(KF.processNoiseCov, Scalar::all(processNoiseVar));
@@ -203,13 +231,6 @@ Point MainWindow::getMousePos()
     mx = mx > x_max ? x_max : mx;
     my = mousePos.y() < 0 ? 0 : mousePos.y();
     my = my > y_max ? y_max : my;
-
-    // add noise to measurements
-    Mat_<float> noise = Mat_<float>(2, 1);
-    cv::randn(noise, 0, sqrt(measurNoiseVar));
-
-    mx += noise.at<float>(0);
-    my += noise.at<float>(1);
 
     return Point(mx, my);
 }

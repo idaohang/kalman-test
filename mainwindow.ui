@@ -183,12 +183,12 @@
             </sizepolicy>
            </property>
            <property name="text">
-            <string>Measurement Rate:</string>
+            <string>Measur. Sampling</string>
            </property>
           </widget>
          </item>
          <item row="1" column="1">
-          <widget class="QSpinBox" name="spinBoxMeasurementRate">
+          <widget class="QSpinBox" name="spinBoxMeasurSampling">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
              <horstretch>0</horstretch>
@@ -196,7 +196,7 @@
             </sizepolicy>
            </property>
            <property name="minimum">
-            <number>1</number>
+            <number>0</number>
            </property>
            <property name="maximum">
             <number>9999</number>
@@ -257,7 +257,7 @@
             </sizepolicy>
            </property>
            <property name="decimals">
-            <number>6</number>
+            <number>8</number>
            </property>
            <property name="maximum">
             <double>9999.000000000000000</double>
@@ -270,29 +270,9 @@
          <item row="4" column="0" colspan="2">
           <layout class="QVBoxLayout" name="verticalLayout_2">
            <item>
-            <widget class="QCheckBox" name="checkBoxShowMouseTrack">
+            <widget class="QCheckBox" name="checkBoxUse3orderModel">
              <property name="text">
-              <string>Show Mouse Track</string>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QCheckBox" name="checkBoxFilterTrack">
-             <property name="text">
-              <string>Show Filter Track</string>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QCheckBox" name="checkBoxShowCross">
-             <property name="text">
-              <string>Show Cross</string>
+              <string>Use 3 order model</string>
              </property>
              <property name="checked">
               <bool>true</bool>
@@ -320,6 +300,55 @@
             </widget>
            </item>
           </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupBox_4">
+        <property name="title">
+         <string>Show</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_3">
+         <item>
+          <widget class="QCheckBox" name="checkBoxShowRealTrack">
+           <property name="text">
+            <string>Show Real Track</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="checkBoxShowMeasurTrack">
+           <property name="text">
+            <string>Show Measured Track</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="checkBoxFilterTrack">
+           <property name="text">
+            <string>Show Filter Track</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="checkBoxShowCross">
+           <property name="text">
+            <string>Show Cross</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>
